@@ -1,0 +1,97 @@
+#!/bin/bash
+ 
+jdk=false
+zk=true
+hadoop=true
+ 
+hostname=`hostname`
+echo "current host name is $hostname"
+whoami=`whoami`
+echo "current user is $whoami"
+ 
+installdir=/opt/soft
+if [ ! -d "$installdir" ]
+then mkdir $installdir
+fi
+ 
+if [ "$jdk" = true ]
+then echo "  ---------安装java JDK------------"
+     tar -zxf /opt/install/jdk-8u111-linux-x64.tar.gz -C /opt/soft/
+     mv /opt/soft/jdk1.8.0_111 /opt/soft/jdk180
+     echo "#jdk" >> /etc/profile
+     echo 'export JAVA_HOME=/opt/soft/jdk180' >> /etc/profile
+     echo 'export CLASSPATH=.:$JAVA_HOMEb/lib/dt.jar:$JAVA_HOME/lib/tools.jar' >> /etc/profile
+     echo 'export PATH=$PATH:$JAVA_HOME/bin' >> /etc/profile
+fi
+ 
+if [ "$zk" = true ];then
+    echo  "----------- 安装zookeeper --------"
+    tar -zxvf zookeeper-3.4.5-cdh5.14.2.tar.gz -C /opt/soft
+    mv /opt/soft/zookeeper-3.4.5-cdh5.14.2 /opt/soft/zookeeper345
+    cp /opt/soft/zookeeper345/conf/zoo_sample.cfg  /opt/soft/zookeeper345/conf/zoo.cfg
+    sed i '/^dataDir=/opt/soft/zookeeper345/datatmp' /opt/soft/zookeeper345/conf/zoo.cfg
+    echo "server.1=$hostname:2888:3888" >> /opt/soft/zookeeper345/conf/zoo.cfg
+    mkdir -p /opt/soft/zookeeper345/datatmp/
+    echo "1"> /opt/soft/zookeeper345/datatmp/myid
+   
+    echo 'export ZOOKEEPER_HOME=/opt/soft/zookeeper345' >> /etc/profile
+    echo 'export PATH=$PATH:$ZOOKEEPER_HOME/bin' >> /etc/profile
+fi
+ 
+ 
+if [ "$hadoop" = true ];then
+  echo '------------ 安装hadoop  ------------'
+  tar -zxf /opt/install/hadoop-2.6.0-cdh5.14.2.tar.gz -C /opt/soft/
+  mv /opt/soft/hadoop-2.6.0-cdh5.14.2 /opt/soft/hadoop260
+ 
+  echo '------------ 修改配置hadoop-env.sh ------------'
+  sed -i "/^export JAVA_HOME=/cexport JAVA_HOME=$JAVA_HOME/" /opt/soft/hadoop260/etc/hadoop/hadoop-env.sh
+ 
+  echo '------------ 修改配置mapred-env.sh ------------'
+  sed -i "/^# export JAVA_HOME=/cexport JAVA_HOME=$JAVA_HOME/" /opt/soft/hadoop260/etc/hadoop/mapred-env.sh
+ 
+  echo '------------ 修改配置yarn-env.sh ------------'
+  sed -i "/^# export JAVA_HOME=/cexport JAVA_HOME=$JAVA_HOME/" /opt/soft/hadoop260/etc/hadoop/yarn-env.sh
+  
+  echo '------------ 修改配置core.site.xml ------------' 
+  core_path="/opt/soft/hadoop260/etc/hadoop/core-site.xml"
+  sed -i '19a\<property><name>hadoop.proxyuser.bigdata.groups</name><value>*</value></property>' $core_path
+  sed -i '19a\<property><name>hadoop.proxyuser.bigdata.hosts</name><value>*</value></property>' $core_path
+  sed -i '19a\<property><name>hadoop.tmp.dir</name><value>/opt/soft/hadoop260/hadooptmp/</value></property>' $core_path
+  sed -i "19a\<property><name>fs.defaultFS</name><value>hdfs://$hostname:9000</value></property>" $core_path
+ 
+  echo '------------ 修改配置 hdfs-site.xml ------------'
+  hdfs_path="/opt/soft/hadoop260/etc/hadoop/hdfs-site.xml"
+  sed -i '19a\<property><name>dfs.replication</name><value>1</value></property>' $hdfs_path
+  sed -i "19a\<property><name>dfs.namenode.secondary.http-address</name><value>$hostname:50090</value></property>" $hdfs_path
+  
+  echo '------------ 修改配置 mapred-site.xml ------------'
+  mapred_path="/opt/soft/hadoop260/etc/hadoop/mapred-site.xml"
+  cp /opt/soft/hadoop260/etc/hadoop/mapred-site.xml.template /opt/soft/hadoop260/etc/hadoop/mapred-site.xml
+  sed -i "19a\<property><name>mapreduce.jobhistory.webapp.address</name><value>$hostname:19888</value></property>" $mapred_path
+  sed -i "19a\<property><name>mapreduce.jobhistory.address</name><value>$hostname:10020</value></property>" $mapred_path
+  sed -i '19a\<property><name>mapreduce.framework.name</name><value>yarn</value></property>' $mapred_path
+ 
+  echo '------------ 修改配置 yarn-site.xml ------------'
+  yarn_path="/opt/soft/hadoop260/etc/hadoop/yarn-site.xml"
+  sed -i "15a\<property><name>yarn.log-aggregation.retain-seconds</name><value>86400</value></property>" $yarn_path
+  sed -i "15a\<property><name>yarn.log-aggregation-enable</name><value>true</value></property>" $yarn_path
+  sed -i "15a\<property><name>yarn.resourcemanager.hostname</name><value>$hostname</value></property>" $yarn_path
+  sed -i "15a\<property><name>yarn.nodemanager.aux-services</name><value>mapreduce_shuffle</value></property>" $yarn_path
+  sed -i "15a\<property><name>yarn.nodemanager.aux-services.mapreduce.shuffle.class</name><value>org.apache.hadoop.mapred.ShuffleHandler</value></property>" $yarn_path
+ 
+ echo '------------ 修改配置 slaves.xml ------------'
+ sed -i "s/localhost/$hostname/g" /opt/soft/hadoop260/etc/hadoop/slaves
+ 
+ echo "#hadoop" >> /etc/profile
+ echo 'export HADOOP_HOME=/opt/soft/hadoop260' >> /etc/profile
+ echo 'export HADOOP_MAPRED_HOME=$HADOOP_HOME' >> /etc/profile
+ echo 'export HADOOP_COMMON_HOME=$HADOOP_HOME' >> /etc/profile
+ echo 'export HADOOP_HDFS_HOME=$HADOOP_HOME' >> /etc/profile
+ echo 'export YARN_HOME=$HADOOP_HOME' >> /etc/profile
+ echo 'export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native' >> /etc/profile
+ echo 'export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib"' >> /etc/profile
+ echo 'export PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin' >> /etc/profile
+  
+ /opt/soft/hadoop260/bin/hadoop namenode -format
+fi
